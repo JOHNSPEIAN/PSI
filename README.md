@@ -99,3 +99,7 @@ GitHub Actions настроен на Python 3.10 / 3.12 в Windows и Ubuntu.
 - `requirements.txt` — зависимость openpyxl с фиксированной версией.
 - `tests/test_main.py` — автоматические тесты.
 - `.github/workflows/tests.yml` — проверки при push и pull request.
+
+## Лабораторная работа №2
+
+Десктопная версия генератора с графическим интерфейсом (Tkinter) — в папке [`lab2/`](lab2/README.md).
