@@ -103,3 +103,13 @@ GitHub Actions настроен на Python 3.10 / 3.12 в Windows и Ubuntu.
 ## Лабораторная работа №2
 
 Десктопная версия генератора с графическим интерфейсом (Tkinter) — в папке [`lab2/`](lab2/README.md).
+Команды выше в этом файле запускают **Лаб 1**. Чтобы запустить Лаб 2 на Windows:
+
+```bat
+cd lab2
+py -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe main.py
+```
+
+Подробности, Linux/macOS и тесты — в [`lab2/README.md`](lab2/README.md).

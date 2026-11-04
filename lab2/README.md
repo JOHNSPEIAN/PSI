@@ -5,10 +5,45 @@
 
 ## Запуск
 
+Все команды выполняются **из папки `lab2`**, а не из корня репозитория: в корне лежит Лаб 1.
+
+### Windows (cmd или PowerShell)
+
+Установите Python 3.10+ с [python.org](https://www.python.org/downloads/) и оставьте включённой
+галочку «tcl/tk and IDLE». На Windows Python вызывается командой `py`, а не `python3`,
+а программы окружения лежат в `.venv\Scripts\`.
+
+```bat
+cd lab2
+py -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe main.py
+```
+
+Первые три команды нужны один раз. Дальше запуск такой:
+
+```bat
+cd lab2
+.venv\Scripts\python.exe main.py
+```
+
+В Git Bash те же пути пишутся через прямой слэш: `.venv/Scripts/python.exe main.py`.
+
+### Linux / macOS
+
 ```bash
-pip install -r requirements.txt
-python main.py                     # файлы берутся из папки data/
-python main.py --data-dir D:\exam  # или из другой папки
+cd lab2
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python main.py
+```
+
+### Другая папка с данными
+
+По умолчанию файлы берутся из `lab2/data/`. Другую папку можно указать так:
+
+```bat
+.venv\Scripts\python.exe main.py --data-dir D:\exam
 ```
 
 В папке данных должны лежать:
@@ -21,7 +56,7 @@ python main.py --data-dir D:\exam  # или из другой папки
 | `ticket_generator.log` | лог: пропущенные билеты, ошибки чтения, блокировки файла |
 
 Демонстрационные `students.xlsx` и `tickets.docx` уже лежат в `data/`
-(пересоздать: `python tools/make_sample_data.py`).
+(пересоздать: `.venv\Scripts\python.exe tools\make_sample_data.py`).
 
 ## Как работает
 
@@ -64,9 +99,13 @@ tools/make_sample_data.py    генерация демо-данных
 
 ## Тесты
 
-```bash
-python -m unittest discover -s tests -t .    # или: python -m pytest
+Из папки `lab2`, после установки зависимостей (см. «Запуск»):
+
+```bat
+.venv\Scripts\python.exe -m unittest discover -s tests -t . -v
 ```
+
+На Linux / macOS: `.venv/bin/python -m unittest discover -s tests -t . -v`.
 
 51 тест покрывает парсинг билетов из Word, поиск студентов по группе, идемпотентность
 (повторный выбор → тот же билет и новая строка «да»), неизменность старых строк журнала,
