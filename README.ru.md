@@ -1,5 +1,7 @@
 # Генератор экзаменационных билетов
 
+[English](README.md) · **Русский**
+
 Консольное приложение по ТЗ «Лабораторная работа: генератор экзаменационных билетов».
 Python 3.10+, Windows / Linux / macOS. Хранилище — `journal.xlsx`.
 
@@ -102,8 +104,9 @@ GitHub Actions настроен на Python 3.10 / 3.12 в Windows и Ubuntu.
 
 ## Лабораторная работа №2
 
-Десктопная версия генератора с графическим интерфейсом (Tkinter) — в папке [`lab2/`](lab2/README.md).
-Команды выше в этом файле запускают **Лаб 1**. Чтобы запустить Лаб 2 на Windows:
+Десктопная версия генератора с графическим интерфейсом (Tkinter) — в папке [`lab2/`](lab2/README.ru.md).
+Команды выше в этом файле запускают **Лаб 1**: `python main.py` в корне всегда открывает
+консольную версию. Чтобы запустить Лаб 2 на Windows:
 
 ```bat
 cd lab2
@@ -112,9 +115,11 @@ py -m venv .venv
 .venv\Scripts\python.exe main.py
 ```
 
-Подробности, Linux/macOS и тесты — в [`lab2/README.md`](lab2/README.md).
+Или прямо из корня: `python lab2\main.py`.
+
+Подробности, Linux/macOS и тесты — в [`lab2/README.ru.md`](lab2/README.ru.md).
 
 Версия 2.0: светлая и тёмная темы, архитектура по SOLID, тесты unit/UI/e2e — см.
 [отчёт о доработке](lab2/docs/REPORT.md) и [CHANGELOG](lab2/CHANGELOG.md).
-English: [`lab2/README.en.md`](lab2/README.en.md). Правила ведения Git на двух языках —
+English: [`lab2/README.md`](lab2/README.md). Правила ведения Git на двух языках —
 [`CONTRIBUTING.md`](CONTRIBUTING.md).

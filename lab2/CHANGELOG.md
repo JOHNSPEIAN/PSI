@@ -3,6 +3,19 @@
 Format: [Keep a Changelog](https://keepachangelog.com/), versions: [SemVer](https://semver.org/).
 Формат: [Keep a Changelog](https://keepachangelog.com/ru/), версии: [SemVer](https://semver.org/lang/ru/).
 
+## [Unreleased]
+
+### Changed / Изменено
+
+- EN: README files are English-first: `README.md` is English, the Russian text moved to
+  `README.ru.md` (repository root and `lab2/`); every file has a language switch at the top.
+  RU: README по умолчанию на английском: `README.md` — английский, русский текст перенесён в
+  `README.ru.md` (в корне и в `lab2/`); вверху каждого файла — переключатель языка.
+- EN: Both READMEs explain that `python main.py` in the root starts Lab 1 and Lab 2 is
+  started with `python lab2\main.py`.
+  RU: В обоих README объяснено, что `python main.py` в корне запускает Лаб 1, а Лаб 2 —
+  `python lab2\main.py`.
+
 ## [2.0.0] — 2026-11-18
 
 ### Added / Добавлено
