@@ -1,7 +1,7 @@
 """Чтение students.xlsx и поиск студента по группе."""
 import unittest
 
-from ticket_generator.students import (StudentsFileError, find_student,
+from ticket_generator.infrastructure.students_xlsx import (StudentsFileError, find_student,
                                        load_students)
 from tests.helpers import GROUPS, TempDirTestCase, write_students
 
@@ -33,7 +33,7 @@ class LoadStudentsTest(TempDirTestCase):
     def test_blank_incomplete_and_duplicate_rows_are_skipped(self):
         path = write_students(self.tmp / "dirty.xlsx", {"G": [
             ("  Иванов ", " Иван "), (None, None), ("Петров", None), ("иванов", "иван"), ("Сидоров", "Олег")]})
-        with self.assertLogs("ticket_generator.students", level="WARNING"):
+        with self.assertLogs("ticket_generator.infrastructure.students_xlsx", level="WARNING"):
             students = load_students(path)["G"]
         self.assertEqual([s.display_name for s in students], ["Иванов Иван", "Сидоров Олег"])
 

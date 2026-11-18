@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     data_dir.mkdir(parents=True, exist_ok=True)
     setup_logging(data_dir / "ticket_generator.log")
 
-    from ticket_generator.gui import App  # импорт после настройки логов
+    from ticket_generator.ui.main_window import App  # импорт после настройки логов
 
     App(data_dir).mainloop()
     return 0

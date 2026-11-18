@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
-from .journal import JournalRow, ResultsJournal
-from .students import Student, find_student
-from .tickets import Ticket
+from ..infrastructure.journal_xlsx import JournalRow, ResultsJournal
+from ..infrastructure.students_xlsx import Student, find_student
+from ..infrastructure.tickets_docx import Ticket
 
 
 @dataclass(frozen=True)

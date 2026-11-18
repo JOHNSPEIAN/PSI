@@ -17,7 +17,7 @@ except Exception:  # нет tkinter или нет графической сре�
 class GuiTest(TempDirTestCase):
     def setUp(self):
         super().setUp()
-        from ticket_generator import gui
+        from ticket_generator.ui import main_window as gui
         self.gui = gui
         write_students(self.tmp / "students.xlsx", GROUPS)
         write_tickets(self.tmp / "tickets.docx", ticket_block(1) + ticket_block(2) + ticket_block(3))

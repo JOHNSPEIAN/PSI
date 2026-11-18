@@ -6,11 +6,11 @@ from unittest import mock
 
 from openpyxl import load_workbook
 
-from ticket_generator.journal import (HEADERS, JournalLockedError, JournalRow,
+from ticket_generator.infrastructure.journal_xlsx import (HEADERS, JournalLockedError, JournalRow,
                                       ResultsJournal)
-from ticket_generator.service import SelectionState, TicketService
-from ticket_generator.students import Student, load_students
-from ticket_generator.tickets import parse_ticket_lines
+from ticket_generator.application.ticket_service import SelectionState, TicketService
+from ticket_generator.infrastructure.students_xlsx import Student, load_students
+from ticket_generator.infrastructure.tickets_docx import parse_ticket_lines
 from tests.helpers import GROUPS, TempDirTestCase, ticket_block, write_students
 
 
@@ -72,7 +72,7 @@ class JournalTest(TempDirTestCase):
     def test_locked_file_on_write_raises_locked_error(self):
         self.journal.ensure_exists()
         before = sheet_values(self.journal.path)
-        with mock.patch("ticket_generator.journal.open", side_effect=PermissionError, create=True):
+        with mock.patch("ticket_generator.infrastructure.journal_xlsx.open", side_effect=PermissionError, create=True):
             with self.assertRaises(JournalLockedError) as ctx:
                 self.journal.append(JournalRow("G", "А", "Б", 1, datetime.now(), False))
         self.assertIn("открыт в Excel", str(ctx.exception))
@@ -80,7 +80,7 @@ class JournalTest(TempDirTestCase):
 
     def test_locked_file_on_replace_raises_locked_error_and_leaves_no_temp(self):
         self.journal.ensure_exists()
-        with mock.patch("ticket_generator.journal.os.replace", side_effect=PermissionError):
+        with mock.patch("ticket_generator.infrastructure.journal_xlsx.os.replace", side_effect=PermissionError):
             with self.assertRaises(JournalLockedError):
                 self.journal.append(JournalRow("G", "А", "Б", 1, datetime.now(), False))
         self.assertEqual([p.name for p in self.tmp.iterdir()], ["results.xlsx"])
@@ -159,7 +159,7 @@ class TicketServiceTest(TempDirTestCase):
 
     def test_retry_after_lock_saves_same_ticket(self):
         assignment = self.service.assign(IVANOV)
-        with mock.patch("ticket_generator.journal.os.replace", side_effect=PermissionError):
+        with mock.patch("ticket_generator.infrastructure.journal_xlsx.os.replace", side_effect=PermissionError):
             with self.assertRaises(JournalLockedError):
                 self.service.save(assignment)
         self.assertEqual(self.journal.rows(), [])

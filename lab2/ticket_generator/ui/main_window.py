@@ -7,10 +7,10 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from .journal import JournalError, JournalLockedError, ResultsJournal
-from .service import Assignment, SelectionState, TicketService
-from .students import StudentsFileError, load_students
-from .tickets import TicketsFileError, load_tickets
+from ..infrastructure.journal_xlsx import JournalError, JournalLockedError, ResultsJournal
+from ..application.ticket_service import Assignment, SelectionState, TicketService
+from ..infrastructure.students_xlsx import StudentsFileError, load_students
+from ..infrastructure.tickets_docx import TicketsFileError, load_tickets
 
 log = logging.getLogger(__name__)
 

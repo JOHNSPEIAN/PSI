@@ -5,7 +5,7 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-from ticket_generator.tickets import (TicketsFileError, load_tickets,
+from ticket_generator.infrastructure.tickets_docx import (TicketsFileError, load_tickets,
                                       parse_ticket_lines)
 from tests.helpers import TempDirTestCase, ticket_block, write_tickets
 
@@ -46,14 +46,14 @@ class ParseTicketsFromWordTest(TempDirTestCase):
     def test_ticket_with_less_than_three_questions_is_skipped_and_logged(self):
         path = write_tickets(self.tmp / "tickets.docx",
                              ticket_block(1) + ticket_block(2, count=2) + ticket_block(3))
-        with self.assertLogs("ticket_generator.tickets", level="ERROR") as logs:
+        with self.assertLogs("ticket_generator.infrastructure.tickets_docx", level="ERROR") as logs:
             tickets = load_tickets(path)
         self.assertEqual(list(tickets), [1, 3])
         self.assertTrue(any("Билет 2 пропущен" in m for m in logs.output))
 
     def test_unrecognized_header_is_skipped_and_logged(self):
         lines = ticket_block(1) + ["Билет X", "1. a", "2. b", "3. c"] + ticket_block(3)
-        with self.assertLogs("ticket_generator.tickets", level="ERROR") as logs:
+        with self.assertLogs("ticket_generator.infrastructure.tickets_docx", level="ERROR") as logs:
             tickets = parse_ticket_lines(lines)
         self.assertEqual(list(tickets), [1, 3])
         self.assertTrue(any("Билет X" in m for m in logs.output))
@@ -62,7 +62,7 @@ class ParseTicketsFromWordTest(TempDirTestCase):
 
     def test_duplicate_ticket_number_keeps_first(self):
         lines = ticket_block(1, prefix="A") + ticket_block(1, prefix="B")
-        with self.assertLogs("ticket_generator.tickets", level="ERROR"):
+        with self.assertLogs("ticket_generator.infrastructure.tickets_docx", level="ERROR"):
             tickets = parse_ticket_lines(lines)
         self.assertEqual(tickets[1].questions[0], "A 1.1")
 
@@ -81,7 +81,7 @@ class ParseTicketsFromWordTest(TempDirTestCase):
 
     def test_file_without_valid_tickets_raises(self):
         path = write_tickets(self.tmp / "tickets.docx", ticket_block(1, count=1))
-        with self.assertLogs("ticket_generator.tickets", level="ERROR"):
+        with self.assertLogs("ticket_generator.infrastructure.tickets_docx", level="ERROR"):
             with self.assertRaises(TicketsFileError):
                 load_tickets(path)
 
