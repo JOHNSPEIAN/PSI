@@ -113,3 +113,8 @@ py -m venv .venv
 ```
 
 Подробности, Linux/macOS и тесты — в [`lab2/README.md`](lab2/README.md).
+
+Версия 2.0: светлая и тёмная темы, архитектура по SOLID, тесты unit/UI/e2e — см.
+[отчёт о доработке](lab2/docs/REPORT.md) и [CHANGELOG](lab2/CHANGELOG.md).
+English: [`lab2/README.en.md`](lab2/README.en.md). Правила ведения Git на двух языках —
+[`CONTRIBUTING.md`](CONTRIBUTING.md).

@@ -8,6 +8,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from .. import __version__
 from ..application.presenter import MainPresenter
 from ..application.view_state import StatusKind, ViewState
 from ..domain import Assignment
@@ -17,7 +18,7 @@ from .ticket_window import TicketWindow
 from .widgets import Card, GradientHeader, NumberBadge, StatTile, StatusBar
 
 APP_TITLE = "Экзаменационные билеты"
-APP_SUBTITLE = "ПСИ · Лабораторная работа №2 · генератор билетов"
+APP_SUBTITLE = f"ПСИ · Лабораторная работа №2 · версия {__version__}"
 SHORTCUTS = "Enter — билет · F5 — обновить · Ctrl+T — тема"
 
 HISTORY_COLUMNS = (
