@@ -83,4 +83,7 @@ if __name__ == "__main__":
     target.mkdir(parents=True, exist_ok=True)
     make_students(target / "students.xlsx")
     make_tickets(target / "tickets.docx")
+    # Вывод в файл или канал в Windows идёт в кодировке cp1252 без кириллицы:
+    # заменяем недоступные символы, а не падаем после того, как файлы уже созданы.
+    sys.stdout.reconfigure(errors="replace")
     print(f"Созданы {target / 'students.xlsx'} и {target / 'tickets.docx'}")
