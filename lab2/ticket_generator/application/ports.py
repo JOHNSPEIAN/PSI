@@ -7,9 +7,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Callable, Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Callable, Mapping, Protocol, Sequence
 
-from ..domain import JournalRow, Roster, Ticket
+from ..domain import Assignment, JournalRow, Roster, Student, Ticket
+
+if TYPE_CHECKING:
+    from .view_state import ViewState
 
 Clock = Callable[[], datetime]
 
@@ -47,3 +50,27 @@ class TicketPicker(Protocol):
     def pick(self, numbers: Sequence[int]) -> int:
         """Выбирает номер билета для нового студента (принцип открытости/закрытости:
         новая стратегия выбора добавляется новым классом, сервис не меняется)."""
+
+
+class TicketIssuer(Protocol):
+    """Выдача билета: определить (без записи) и сохранить. Реализация — TicketService."""
+
+    def assign(self, student: Student) -> Assignment: ...
+
+    def save(self, assignment: Assignment) -> None: ...
+
+
+class Dialogs(Protocol):
+    """Модальные сообщения пользователю. Реализация — ui/dialogs.py (messagebox)."""
+
+    def show_error(self, title: str, message: str) -> None: ...
+
+    def ask_retry(self, title: str, message: str) -> bool: ...
+
+
+class MainView(Protocol):
+    """Пассивное представление: только отображает то, что передал презентер."""
+
+    def render(self, state: ViewState) -> None: ...
+
+    def show_ticket(self, assignment: Assignment) -> None: ...

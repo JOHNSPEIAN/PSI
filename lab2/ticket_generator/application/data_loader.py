@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Mapping
 
-from ..domain import DataSourceError, Roster, Ticket
+from ..domain import DataSourceError, Roster, Ticket, TicketsFileError
 from .ports import JournalInitializer, StudentsSource, TicketsSource
 
 log = logging.getLogger(__name__)
@@ -44,6 +44,8 @@ class DataLoader:
             errors.append(self._report(exc))
         try:
             tickets = dict(self._tickets.load())
+            if not tickets:
+                raise TicketsFileError("Нет ни одного корректного билета")
         except DataSourceError as exc:
             errors.append(self._report(exc))
         try:

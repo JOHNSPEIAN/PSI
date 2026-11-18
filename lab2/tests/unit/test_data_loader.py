@@ -29,6 +29,13 @@ class DataLoaderTest(unittest.TestCase):
         self.assertIn("нет tickets.docx", result.errors[1])
         self.assertIn("results.xlsx", result.errors[2])
 
+    def test_source_without_tickets_is_an_error(self):
+        with self.assertLogs("ticket_generator.application.data_loader", level="ERROR"):
+            result = DataLoader(InMemoryStudentsSource(GROUPS), InMemoryTicketsSource({}),
+                                InMemoryJournal()).load()
+        self.assertFalse(result.ok)
+        self.assertIn("Нет ни одного корректного билета", result.errors[0])
+
     def test_partial_failure_returns_no_data(self):
         with self.assertLogs("ticket_generator.application.data_loader", level="ERROR"):
             result = DataLoader(InMemoryStudentsSource(GROUPS),

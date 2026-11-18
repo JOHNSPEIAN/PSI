@@ -92,7 +92,8 @@ class RandomPickerTest(unittest.TestCase):
         self.assertEqual(seen, {1, 3, 5})
 
     def test_random_choice_only_among_valid_tickets(self):
-        tickets = parse_ticket_lines(ticket_block(1) + ticket_block(2, count=1) + ticket_block(3))
+        with self.assertLogs("ticket_generator.infrastructure.tickets_docx", level="ERROR"):
+            tickets = parse_ticket_lines(ticket_block(1) + ticket_block(2, count=1) + ticket_block(3))
         service = TicketService(tickets, InMemoryJournal(), RandomTicketPicker(random.Random(0)))
         numbers = {service.assign(Student("G", f"S{i}", "N")).ticket_no for i in range(50)}
         self.assertEqual(numbers, {1, 3})
