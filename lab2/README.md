@@ -1,24 +1,23 @@
-# Лабораторная работа №2 — генератор экзаменационных билетов
+# Lab 2 — exam ticket generator
 
-[English version](README.en.md) · [История изменений](CHANGELOG.md) · [Отчёт о доработке](docs/REPORT.md) · [Правила Git](../CONTRIBUTING.md)
+[Русская версия](README.md) · [Changelog](CHANGELOG.md) · [Work report (RU)](docs/REPORT.md) · [Git rules](../CONTRIBUTING.md)
 
-Десктопное приложение на **Python + Tkinter**. Студент выбирает группу и себя в списке,
-нажимает «Сгенерировать билет» и получает билет из трёх вопросов. Каждая выдача сразу
-дописывается в журнал `results.xlsx`.
+A **Python + Tkinter** desktop app. A student picks a group and their name, presses
+“Generate ticket” and gets an exam ticket with three questions. Every issue is appended to
+the `results.xlsx` journal immediately.
 
-| Светлая тема | Тёмная тема |
+| Light theme | Dark theme |
 |---|---|
-| ![Главное окно, светлая тема](docs/screenshots/main-light.png) | ![Главное окно, тёмная тема](docs/screenshots/main-dark.png) |
-| ![Новый билет](docs/screenshots/ticket-new-light.png) | ![Повторное обращение](docs/screenshots/ticket-repeat-dark.png) |
+| ![Main window, light](docs/screenshots/main-light.png) | ![Main window, dark](docs/screenshots/main-dark.png) |
+| ![New ticket](docs/screenshots/ticket-new-light.png) | ![Repeat request](docs/screenshots/ticket-repeat-dark.png) |
 
-## Запуск
+The interface is in Russian, as required by the assignment.
 
-Все команды выполняются **из папки `lab2`**: в корне репозитория лежит Лаб 1 (консольная).
+## Running
 
-### Windows (cmd или PowerShell)
+Run every command **from the `lab2` folder**; the repository root contains Lab 1 (console app).
 
-Нужен Python 3.10+ с [python.org](https://www.python.org/downloads/) с включённой галочкой
-«tcl/tk and IDLE». В Windows Python вызывается командой `py` или `python`, а не `python3`.
+Windows (Python 3.10+ from python.org with “tcl/tk and IDLE” enabled):
 
 ```bat
 cd lab2
@@ -27,9 +26,7 @@ py -m venv .venv
 .venv\Scripts\python.exe main.py
 ```
 
-Первые три команды нужны один раз, дальше достаточно `.venv\Scripts\python.exe main.py`.
-
-### Linux / macOS
+Linux / macOS:
 
 ```bash
 cd lab2
@@ -38,125 +35,75 @@ python3 -m venv .venv
 .venv/bin/python main.py
 ```
 
-### Параметры
-
-| Параметр | Значение |
+| Option | Meaning |
 |---|---|
-| `--data-dir ПАПКА` | где лежат `students.xlsx`, `tickets.docx`, `results.xlsx` (по умолчанию `data/`) |
-| `--theme system\|light\|dark` | оформление; `system` (по умолчанию) берёт тему из настроек Windows |
+| `--data-dir DIR` | folder with `students.xlsx`, `tickets.docx`, `results.xlsx` (default `data/`) |
+| `--theme system\|light\|dark` | appearance; `system` (default) follows the Windows app mode |
 
-### Клавиши
-
-| Клавиша | Действие |
+| Key | Action |
 |---|---|
-| `Enter` | сгенерировать билет (когда выбраны группа и студент); в окне билета — закрыть |
-| `Esc` | закрыть окно билета (главное окно остаётся) |
-| `F5`, `Ctrl+R` | перечитать файлы данных |
-| `Ctrl+T` | переключить светлую/тёмную тему |
+| `Enter` | generate a ticket (group and student selected); closes the ticket window |
+| `Esc` | close the ticket window only |
+| `F5`, `Ctrl+R` | reload data files |
+| `Ctrl+T` | switch light/dark theme (works with the Russian keyboard layout too) |
 
-Сочетания с `Ctrl` работают и в русской раскладке.
+## Data files
 
-## Файлы данных
-
-| Файл | Формат |
+| File | Format |
 |---|---|
-| `students.xlsx` | один лист на группу (имя листа = группа), строка 1 — заголовок, A — Фамилия, B — Имя |
-| `tickets.docx` | `Билет N`, затем три абзаца `1. …`, `2. …`, `3. …` (текст или автонумерация Word) |
-| `results.xlsx` | журнал: Группа, Фамилия, Имя, Номер билета, Дата и время, Повтор (да/нет); создаётся сам |
-| `ticket_generator.log` | лог: пропущенные билеты, ошибки чтения, блокировки файла |
+| `students.xlsx` | one sheet per group (sheet name = group), row 1 is a header, A — surname, B — name |
+| `tickets.docx` | `Билет N` followed by three paragraphs `1. …`, `2. …`, `3. …` (plain text or Word numbering) |
+| `results.xlsx` | journal: group, surname, name, ticket number, date and time, repeat (да/нет); created automatically |
+| `ticket_generator.log` | skipped tickets, read errors, file locks |
 
-Демо-данные лежат в `data/`, пересоздать их можно командой `python tools/make_sample_data.py`.
+## Rules
 
-## Правила
+- **Repeat request.** A student already in the journal (group + surname + name) gets the
+  ticket number from their *first* record; a new row with “repeat = да” is appended.
+  Namesakes from different groups are different students.
+- **A new student** gets a random ticket among the correctly parsed ones.
+- **Append-only journal.** Old rows never change; saving is atomic (temp file + replace).
+- **Errors never crash the app.** Missing files → message and a “reload” button.
+  `results.xlsx` open in Excel → “Retry / Cancel”; a retry saves the *same* ticket.
+  Tickets with fewer than three questions, an unrecognised header or a duplicate number
+  are skipped and logged.
+- **`Esc` closes only the ticket window.** The group stays selected, the student is reset.
 
-- **Повторное обращение.** Если студент (группа + фамилия + имя) уже есть в журнале, он получает
-  номер билета из своей *первой* записи, а в конец журнала добавляется строка «Повтор = да».
-  Перед выдачей окно подсказывает: «Ранее выдан билет № N». Тёзки из разных групп — разные люди.
-- **Новый студент** получает случайный билет из корректно разобранных в `tickets.docx`.
-- **Журнал только дописывается.** Старые строки не меняются, запись атомарная
-  (временный файл, затем замена), поэтому по журналу восстанавливается полная история.
-- **Ошибки не роняют приложение.** Нет файла — сообщение и кнопка «Обновить данные».
-  `results.xlsx` открыт в Excel — диалог «Повторить / Отмена», при повторе сохраняется
-  *тот же* билет. Билеты с менее чем тремя вопросами, заголовком вида `Билет X` или повторным
-  номером пропускаются и пишутся в лог.
-- **`Esc` закрывает только окно билета.** Группа остаётся выбранной, студент сбрасывается.
-
-## Архитектура
-
-Код разделён на слои; зависимости направлены внутрь, к домену.
+## Architecture
 
 ```mermaid
 flowchart LR
-    main["main.py<br/>аргументы, логи, HiDPI"] --> boot["bootstrap.py<br/>корень композиции"]
-    boot --> ui["ui/<br/>MainWindow, TicketWindow,<br/>тема, диалоги"]
+    main["main.py<br/>args, logging, HiDPI"] --> boot["bootstrap.py<br/>composition root"]
+    boot --> ui["ui/<br/>MainWindow, TicketWindow,<br/>theme, dialogs"]
     boot --> infra["infrastructure/<br/>Excel, Word"]
-    ui --> app["application/<br/>MainPresenter, TicketService,<br/>DataLoader, порты"]
-    infra -. реализует порты .-> app
-    app --> domain["domain/<br/>Student, Ticket, Roster,<br/>JournalRow, ошибки"]
+    ui --> app["application/<br/>MainPresenter, TicketService,<br/>DataLoader, ports"]
+    infra -. implements ports .-> app
+    app --> domain["domain/<br/>Student, Ticket, Roster,<br/>JournalRow, errors"]
     infra --> domain
 ```
 
-```
-main.py                         точка входа
-ticket_generator/
-  bootstrap.py                  корень композиции: здесь выбираются Excel/Word/Tkinter
-  domain/                       сущности и ошибки, без файлов и интерфейса
-  application/
-    ports.py                    интерфейсы (Protocol): источники, журнал, диалоги, окно
-    ticket_service.py           правило выдачи билета, стратегия выбора RandomTicketPicker
-    data_loader.py              загрузка всех источников с накоплением ошибок
-    presenter.py                логика главного экрана (MVP)
-    view_state.py, selection.py, formatting.py
-  infrastructure/               students_xlsx, tickets_docx, journal_xlsx — адаптеры портов
-  ui/                           theme (дизайн-система), widgets, main_window, ticket_window,
-                                dialogs, platform (HiDPI, тёмный заголовок Windows, иконка)
-tests/unit | tests/ui | tests/e2e
-tools/                          демо-данные и скриншоты
-```
-
-### SOLID
-
-| Принцип | Где и как |
+| Principle | Where |
 |---|---|
-| **S** — единственная ответственность | парсер Word, журнал Excel, правило выдачи, логика экрана и отрисовка — отдельные классы; поиск «первого билета» перенесён из Excel-журнала в домен (`first_ticket_of`) |
-| **O** — открытость/закрытость | выбор билета — стратегия `TicketPicker` (в тестах `FixedPicker`), тема — экземпляр `Palette`: новое поведение добавляется новым классом без правки сервиса или окон |
-| **L** — подстановка Лисков | все источники бросают наследников `DataSourceError`; контрактные тесты `test_journal_contract.py` прогоняются и на `XlsxJournal`, и на `InMemoryJournal` |
-| **I** — разделение интерфейсов | узкие порты: `JournalReader`, `JournalWriter`, `JournalInitializer`; истории нужен только reader, загрузчику — только initializer |
-| **D** — инверсия зависимостей | `TicketService`, `DataLoader`, `MainPresenter` зависят от `Protocol`-портов; конкретные классы создаются только в `bootstrap.py` |
+| **S**ingle responsibility | Word parser, Excel journal, issuing rule, screen logic and rendering are separate classes; the “first ticket” rule moved from the Excel journal to the domain |
+| **O**pen/closed | ticket choice is a `TicketPicker` strategy, a theme is a `Palette` instance — new behaviour is a new class |
+| **L**iskov substitution | every source raises a `DataSourceError` subclass; journal contract tests run against both `XlsxJournal` and `InMemoryJournal` |
+| **I**nterface segregation | narrow ports `JournalReader`, `JournalWriter`, `JournalInitializer` |
+| **D**ependency inversion | services and the presenter depend on `Protocol` ports; concrete classes are created only in `bootstrap.py` |
 
-Главное окно — **пассивное представление (MVP)**: оно лишь отображает `ViewState` и передаёт
-действия в `MainPresenter`. Поэтому вся логика экрана проверяется модульными тестами без Tk.
+The main window is a **passive MVP view**: it renders a `ViewState` and forwards user actions
+to `MainPresenter`, so all screen logic is unit-tested without Tk.
 
-## Тесты
+## Tests
 
-163 теста в трёх уровнях (`unittest`, совместимы с `pytest`):
+163 tests on three levels (`unittest`, pytest-compatible):
 
-| Уровень | Тестов | Что проверяет | Запуск |
+| Level | Tests | Scope | Command |
 |---|---|---|---|
-| unit | 114 | домен, парсер Word, журнал Excel, контракт журнала, сервис, загрузчик, презентер, формы слов, контраст палитр (WCAG AA) | `python -m unittest discover -s tests/unit -t .` |
-| UI | 33 | настоящие виджеты Tk: выбор в списках, кнопки, Enter/Esc/F5/Ctrl+T, окно билета, переключение темы, стили | `python -m unittest discover -s tests/ui -t .` |
-| e2e | 16 | всё приложение на настоящих файлах: сессия экзамена, повтор после перезапуска, нет файлов, «открыт в Excel» (настоящая блокировка файла в Windows), запуск `main.py` отдельным процессом | `python -m unittest discover -s tests/e2e -t .` |
+| unit | 114 | domain, Word parser, Excel journal, journal contract, service, loader, presenter, Russian plurals, WCAG AA contrast of both palettes | `python -m unittest discover -s tests/unit -t .` |
+| UI | 33 | real Tk widgets: combobox selection, buttons, Enter/Esc/F5/Ctrl+T, ticket window, theme switch | `python -m unittest discover -s tests/ui -t .` |
+| e2e | 16 | the whole app on real files: exam session, repeat after restart, missing files, “open in Excel” (a real file lock on Windows), `main.py` in a separate process | `python -m unittest discover -s tests/e2e -t .` |
 
-Все сразу: `python -m unittest discover -s tests -t .`
+CI (GitHub Actions) runs every level on Windows and Ubuntu with Python 3.10 and 3.12;
+Linux uses `xvfb`, and `REQUIRE_GUI=1` turns a missing display into a failure instead of a skip.
 
-UI- и e2e-тесты пропускаются, если нет графической среды. В CI (GitHub Actions: Windows и
-Ubuntu, Python 3.10 и 3.12) на Linux поднимается `xvfb`, а `REQUIRE_GUI=1` делает пропуск ошибкой.
-
-### Критерии приёмки → тесты
-
-| № | Критерий | Тесты |
-|---|---|---|
-| 1 | Список студентов соответствует листу | `test_students_match_sheet_rows`, `test_group_then_student_enables_button` (UI) |
-| 2 | Кнопка активна только при обоих выборах | `test_button_enabled_only_when_both_selected`, `test_empty_group_*`, `test_enter_does_nothing_until_student_selected` |
-| 3 | Билет и три вопроса отображаются | `test_shows_number_student_and_three_questions`, `test_click_shows_ticket_and_updates_history` |
-| 4 | Повторный выбор → тот же номер | `test_repeat_selection_returns_same_ticket`, `test_repeat_survives_restart_and_is_announced` (e2e) |
-| 5 | `Esc` закрывает только окно результата | `test_escape_closes_only_this_window`, `test_escape_closes_only_ticket_and_resets_student` |
-| 6 | Строка появляется сразу, старые не тронуты | `test_row_is_written_immediately_after_generation`, `test_append_keeps_existing_rows_untouched` |
-| 7 | Отсутствующий или заблокированный файл не роняет приложение | `test_missing_files_then_fixed_and_reloaded`, `test_journal_open_in_excel_*` (e2e), `test_app_starts_without_data_files` |
-| 8 | Повтор — новая строка в конце, тот же номер, «да» | `test_repeat_appends_new_row_with_yes`, `test_full_session_with_repeat` (e2e) |
-| 9 | Полная история в хронологическом порядке | `test_full_history_in_chronological_order`, `test_full_session_with_repeat` (e2e) |
-
-## Скриншоты
-
-`python tools/make_screenshots.py` пересоздаёт картинки в `docs/screenshots/`
-(нужен Pillow: `pip install pillow`; работает на копии демо-данных во временной папке).
+Screenshots are regenerated with `python tools/make_screenshots.py` (requires Pillow).
