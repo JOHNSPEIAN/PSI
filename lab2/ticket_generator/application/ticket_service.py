@@ -1,52 +1,51 @@
-"""Логика назначения билета и состояние формы (без зависимости от Tkinter)."""
+"""Сервис выдачи билета. Зависит только от портов, а не от Excel/Word/Tkinter."""
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable
+from typing import Mapping, Sequence
 
-from ..infrastructure.journal_xlsx import JournalRow, ResultsJournal
-from ..infrastructure.students_xlsx import Student, find_student
-from ..infrastructure.tickets_docx import Ticket
+from ..domain import Assignment, Student, Ticket, first_ticket_of
+from .ports import Clock, TicketJournal, TicketPicker
 
 
-@dataclass(frozen=True)
-class Assignment:
-    student: Student
-    ticket_no: int
-    questions: tuple[str, ...]  # пусто, если билета с этим номером больше нет в tickets.docx
-    repeat: bool
-    timestamp: datetime
+class RandomTicketPicker:
+    """Случайный выбор среди корректно разобранных билетов."""
 
-    def to_journal_row(self) -> JournalRow:
-        s = self.student
-        return JournalRow(s.group, s.surname, s.name, self.ticket_no, self.timestamp, self.repeat)
+    def __init__(self, rng: random.Random | None = None):
+        self._rng = rng or random.Random()
+
+    def pick(self, numbers: Sequence[int]) -> int:
+        return self._rng.choice(list(numbers))
+
+
+def _now() -> datetime:
+    return datetime.now().replace(microsecond=0)
 
 
 class TicketService:
-    def __init__(self, tickets: dict[int, Ticket], journal: ResultsJournal,
-                 rng: random.Random | None = None,
-                 clock: Callable[[], datetime] | None = None):
+    """Правило выдачи: повторное обращение получает билет из первой записи журнала,
+    новый студент — билет, выбранный стратегией TicketPicker."""
+
+    def __init__(self, tickets: Mapping[int, Ticket], journal: TicketJournal,
+                 picker: TicketPicker | None = None, clock: Clock | None = None):
         if not tickets:
             raise ValueError("Нет ни одного билета")
-        self.tickets = tickets
+        self.tickets = dict(tickets)
         self.journal = journal
-        self.rng = rng or random.Random()
-        self.clock = clock or (lambda: datetime.now().replace(microsecond=0))
+        self.picker = picker or RandomTicketPicker()
+        self.clock = clock or _now
 
     def assign(self, student: Student) -> Assignment:
-        """Определяет билет: первый из журнала (повтор) или случайный из файла.
+        """Определяет билет, ничего не записывая.
 
-        Ничего не записывает — запись делает save(), чтобы при блокировке файла
-        повтор попытки сохранял тот же самый билет.
+        Запись делает save(): если журнал занят, повтор попытки сохранит тот же билет.
         """
-        first = self.journal.find_first_ticket(student.group, student.surname, student.name)
+        first = first_ticket_of(self.journal.rows(), student)
         if first is not None:
             ticket = self.tickets.get(first)
-            questions = ticket.questions if ticket else ()
-            return Assignment(student, first, questions, True, self.clock())
-        number = self.rng.choice(list(self.tickets))
+            return Assignment(student, first, ticket.questions if ticket else (), True, self.clock())
+        number = self.picker.pick(list(self.tickets))
         return Assignment(student, number, self.tickets[number].questions, False, self.clock())
 
     def save(self, assignment: Assignment) -> None:
@@ -56,36 +55,3 @@ class TicketService:
         assignment = self.assign(student)
         self.save(assignment)
         return assignment
-
-
-class SelectionState:
-    """Состояние выпадающих списков и кнопки — то, что отображает GUI."""
-
-    def __init__(self, groups: dict[str, list[Student]] | None = None):
-        self.groups = groups or {}
-        self.group: str | None = None
-        self.student: Student | None = None
-
-    @property
-    def group_names(self) -> list[str]:
-        return list(self.groups)
-
-    def students_of(self, group: str) -> list[str]:
-        return [s.display_name for s in self.groups.get(group, [])]
-
-    def select_group(self, group: str | None) -> list[str]:
-        """Выбор группы сбрасывает студента и возвращает список для второго комбобокса."""
-        self.group = group if group in self.groups else None
-        self.student = None
-        return self.students_of(self.group) if self.group else []
-
-    def select_student(self, display_name: str | None) -> None:
-        self.student = (find_student(self.groups, self.group, display_name)
-                        if self.group and display_name else None)
-
-    def reset_student(self) -> None:
-        self.student = None
-
-    @property
-    def can_generate(self) -> bool:
-        return self.group is not None and self.student is not None

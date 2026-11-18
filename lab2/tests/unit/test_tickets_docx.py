@@ -5,8 +5,9 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-from ticket_generator.infrastructure.tickets_docx import (TicketsFileError, load_tickets,
-                                      parse_ticket_lines)
+from ticket_generator.domain import TicketsFileError
+from ticket_generator.infrastructure.tickets_docx import (DocxTicketsSource, load_tickets,
+                                                          parse_ticket_lines)
 from tests.helpers import TempDirTestCase, ticket_block, write_tickets
 
 
@@ -67,11 +68,13 @@ class ParseTicketsFromWordTest(TempDirTestCase):
         self.assertEqual(tickets[1].questions[0], "A 1.1")
 
     def test_extra_questions_are_truncated_to_three(self):
-        tickets = parse_ticket_lines(ticket_block(1, count=5))
+        with self.assertLogs("ticket_generator.infrastructure.tickets_docx", level="WARNING"):
+            tickets = parse_ticket_lines(ticket_block(1, count=5))
         self.assertEqual(len(tickets[1].questions), 3)
 
     def test_questions_before_first_header_are_ignored(self):
-        tickets = parse_ticket_lines(["1. сирота"] + ticket_block(1))
+        with self.assertLogs("ticket_generator.infrastructure.tickets_docx", level="WARNING"):
+            tickets = parse_ticket_lines(["1. сирота"] + ticket_block(1))
         self.assertEqual(list(tickets), [1])
 
     def test_missing_file_raises_clear_error(self):
@@ -90,6 +93,15 @@ class ParseTicketsFromWordTest(TempDirTestCase):
         path.write_bytes(b"not a docx")
         with self.assertRaises(TicketsFileError):
             load_tickets(path)
+
+    def test_ticket_zero_is_rejected(self):
+        with self.assertLogs("ticket_generator.infrastructure.tickets_docx", level="ERROR"):
+            tickets = parse_ticket_lines(["Билет 0", "1. a", "2. b", "3. c"] + ticket_block(1))
+        self.assertEqual(list(tickets), [1])
+
+    def test_source_adapter_reads_same_tickets(self):
+        path = write_tickets(self.tmp / "tickets.docx", ticket_block(1) + ticket_block(2))
+        self.assertEqual(DocxTicketsSource(path).load(), load_tickets(path))
 
 
 if __name__ == "__main__":

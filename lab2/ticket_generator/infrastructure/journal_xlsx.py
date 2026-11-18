@@ -10,12 +10,12 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
-from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
+
+from ..domain import JournalError, JournalLockedError, JournalRow
 
 log = logging.getLogger(__name__)
 
@@ -26,33 +26,18 @@ REPEAT_YES = "да"
 REPEAT_NO = "нет"
 
 
-class JournalError(Exception):
-    """Журнал не читается (повреждён, не xlsx и т.п.)."""
+def _as_cells(row: JournalRow) -> list:
+    return [row.group, row.surname, row.name, row.ticket_no, row.timestamp,
+            REPEAT_YES if row.repeat else REPEAT_NO]
 
 
-class JournalLockedError(JournalError):
-    """Журнал недоступен для записи — обычно открыт в Excel."""
+def _is_yes(value) -> bool:
+    return value is not None and str(value).strip().casefold() == REPEAT_YES
 
 
-@dataclass(frozen=True)
-class JournalRow:
-    group: str
-    surname: str
-    name: str
-    ticket_no: int
-    timestamp: datetime
-    repeat: bool
+class XlsxJournal:
+    """Журнал в Excel: реализует порты JournalReader, JournalWriter и JournalInitializer."""
 
-    def as_cells(self) -> list:
-        return [self.group, self.surname, self.name, self.ticket_no, self.timestamp,
-                REPEAT_YES if self.repeat else REPEAT_NO]
-
-
-def _norm(value) -> str:
-    return "" if value is None else str(value).strip().casefold()
-
-
-class ResultsJournal:
     def __init__(self, path: str | Path):
         self.path = Path(path)
 
@@ -107,19 +92,11 @@ class ResultsJournal:
                     name=str(row[2] or "").strip(),
                     ticket_no=ticket_no,
                     timestamp=row[4],
-                    repeat=_norm(row[5]) == REPEAT_YES,
+                    repeat=_is_yes(row[5]),
                 ))
         finally:
             wb.close()
         return result
-
-    def find_first_ticket(self, group: str, surname: str, name: str) -> int | None:
-        """Номер билета из самой первой записи по студенту или None."""
-        key = (_norm(group), _norm(surname), _norm(name))
-        for row in self.rows():
-            if (_norm(row.group), _norm(row.surname), _norm(row.name)) == key:
-                return row.ticket_no
-        return None
 
     # ---------- запись ----------
     def _locked_message(self) -> str:
@@ -155,7 +132,7 @@ class ResultsJournal:
         self._check_writable()
         wb = self._open(read_only=False)
         ws = wb.worksheets[0]
-        ws.append(row.as_cells())
+        ws.append(_as_cells(row))
         ws.cell(row=ws.max_row, column=5).number_format = DATETIME_FORMAT
         self._save(wb)
         log.info("Журнал: %s %s %s — билет %d, повтор=%s",

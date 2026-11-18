@@ -2,18 +2,11 @@
 import unittest
 from unittest import mock
 
+from tests.gui_support import press, requires_display
 from tests.helpers import GROUPS, TempDirTestCase, ticket_block, write_students, write_tickets
 
-try:
-    import tkinter as tk
-    _root = tk.Tk()
-    _root.destroy()
-    HAS_DISPLAY = True
-except Exception:  # нет tkinter или нет графической среды
-    HAS_DISPLAY = False
 
-
-@unittest.skipUnless(HAS_DISPLAY, "Tkinter/дисплей недоступны")
+@requires_display
 class GuiTest(TempDirTestCase):
     def setUp(self):
         super().setUp()
@@ -81,7 +74,7 @@ class GuiTest(TempDirTestCase):
         self.assertTrue(any(t.startswith("Ваш билет № ") for t in texts))
         self.assertEqual(sum(1 for t in texts if t[:3] in ("1. ", "2. ", "3. ")), 3)
 
-        win.event_generate("<Escape>")
+        press(win, "<Escape>")
         self.pump()
         self.assertIsNone(app.result_window)
         self.assertTrue(app.winfo_exists())  # приложение живо

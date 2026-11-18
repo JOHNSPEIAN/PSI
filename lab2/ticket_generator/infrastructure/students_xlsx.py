@@ -6,38 +6,23 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 
 from openpyxl import load_workbook
 
+from ..domain import Roster, Student, StudentsFileError
+
 log = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class Student:
-    group: str
-    surname: str
-    name: str
-
-    @property
-    def display_name(self) -> str:
-        """Формат для выпадающего списка: «Фамилия Имя»."""
-        return f"{self.surname} {self.name}"
-
-
-class StudentsFileError(Exception):
-    """students.xlsx отсутствует или не читается."""
 
 
 def _cell_text(value) -> str:
     return "" if value is None else str(value).strip()
 
 
-def load_students(path: str | Path) -> dict[str, list[Student]]:
-    """Возвращает {имя группы: [Student, ...]} в порядке листов книги.
+def load_students(path: str | Path) -> Roster:
+    """Читает группы в порядке листов книги.
 
-    Пустая группа (лист без студентов) остаётся в словаре с пустым списком.
+    Пустая группа (лист без студентов) остаётся в списке групп.
     """
     path = Path(path)
     if not path.is_file():
@@ -72,12 +57,14 @@ def load_students(path: str | Path) -> dict[str, list[Student]]:
             groups[group] = students
     finally:
         wb.close()
-    return groups
+    return Roster(groups)
 
 
-def find_student(groups: dict[str, list[Student]], group: str, display_name: str) -> Student | None:
-    """Поиск студента по группе и строке «Фамилия Имя» из выпадающего списка."""
-    for student in groups.get(group, []):
-        if student.display_name == display_name:
-            return student
-    return None
+class XlsxStudentsSource:
+    """Порт StudentsSource поверх файла Excel."""
+
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+
+    def load(self) -> Roster:
+        return load_students(self.path)

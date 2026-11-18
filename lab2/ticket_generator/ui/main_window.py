@@ -7,10 +7,13 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from ..infrastructure.journal_xlsx import JournalError, JournalLockedError, ResultsJournal
-from ..application.ticket_service import Assignment, SelectionState, TicketService
-from ..infrastructure.students_xlsx import StudentsFileError, load_students
-from ..infrastructure.tickets_docx import TicketsFileError, load_tickets
+from ..application.data_loader import DataLoader
+from ..application.selection import SelectionState
+from ..application.ticket_service import TicketService
+from ..domain import Assignment, JournalError, JournalLockedError
+from ..infrastructure.journal_xlsx import XlsxJournal
+from ..infrastructure.students_xlsx import XlsxStudentsSource
+from ..infrastructure.tickets_docx import DocxTicketsSource
 
 log = logging.getLogger(__name__)
 
@@ -135,37 +138,19 @@ class App(tk.Tk):
         self.selection = SelectionState()
         self._refresh_combos()
 
-        errors: list[str] = []
-        groups = {}
-        tickets = {}
-        try:
-            groups = load_students(self.data_dir / STUDENTS_FILE)
-        except StudentsFileError as exc:
-            log.error("%s", exc)
-            errors.append(str(exc))
-        try:
-            tickets = load_tickets(self.data_dir / TICKETS_FILE)
-        except TicketsFileError as exc:
-            log.error("%s", exc)
-            errors.append(str(exc))
-
-        journal = ResultsJournal(self.data_dir / RESULTS_FILE)
-        try:
-            journal.ensure_exists()
-        except JournalError as exc:
-            log.error("%s", exc)
-            errors.append(str(exc))
-
-        if errors:
+        journal = XlsxJournal(self.data_dir / RESULTS_FILE)
+        result = DataLoader(XlsxStudentsSource(self.data_dir / STUDENTS_FILE),
+                            DocxTicketsSource(self.data_dir / TICKETS_FILE), journal).load()
+        if not result.ok:
             self.status_var.set("Данные не загружены. Исправьте файлы и нажмите «Обновить данные».")
-            messagebox.showerror("Ошибка загрузки данных", "\n\n".join(errors), parent=self)
+            messagebox.showerror("Ошибка загрузки данных", "\n\n".join(result.errors), parent=self)
             return
 
-        self.selection = SelectionState(groups)
-        self.service = TicketService(tickets, journal)
+        self.selection = SelectionState(result.roster)
+        self.service = TicketService(result.tickets, journal)
         self._refresh_combos()
-        total = sum(len(v) for v in groups.values())
-        self.status_var.set(f"Групп: {len(groups)}, студентов: {total}, билетов: {len(tickets)}.")
+        self.status_var.set(f"Групп: {len(result.roster)}, студентов: {result.roster.total_students}, "
+                            f"билетов: {len(result.tickets)}.")
 
     def _refresh_combos(self) -> None:
         self.group_combo["values"] = self.selection.group_names

@@ -17,30 +17,19 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 from docx import Document
 
-log = logging.getLogger(__name__)
+from ..domain import QUESTIONS_PER_TICKET, Ticket, TicketsFileError
 
-QUESTIONS_PER_TICKET = 3
+log = logging.getLogger(__name__)
 
 HEADER_RE = re.compile(r"^\s*Билет\s*№?\s*(\d+)\s*[.:]?\s*$", re.IGNORECASE)
 # Строка, похожая на заголовок, но не распознанная (например, «Билет X» или «Билет»).
 HEADER_LIKE_RE = re.compile(r"^\s*Билет\b", re.IGNORECASE)
 QUESTION_RE = re.compile(r"^\s*(\d+)\s*[.)]\s*(.+?)\s*$")
-
-
-@dataclass(frozen=True)
-class Ticket:
-    number: int
-    questions: tuple[str, ...]
-
-
-class TicketsFileError(Exception):
-    """tickets.docx отсутствует, не читается или не содержит ни одного корректного билета."""
 
 
 def _is_numbered_paragraph(paragraph) -> bool:
@@ -134,3 +123,13 @@ def load_tickets(path: str | Path) -> dict[int, Ticket]:
                                f"(нужен заголовок «Билет N» и {QUESTIONS_PER_TICKET} вопроса)")
     log.info("Загружено билетов: %d", len(tickets))
     return tickets
+
+
+class DocxTicketsSource:
+    """Порт TicketsSource поверх документа Word."""
+
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+
+    def load(self) -> dict[int, Ticket]:
+        return load_tickets(self.path)
