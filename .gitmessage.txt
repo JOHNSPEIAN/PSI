@@ -1,0 +1,19 @@
+
+# <type>(<scope>): <English summary> — <русское резюме>
+#
+# EN: what changed and why (wrap at 72 characters).
+#
+# RU: что изменилось и зачем (перенос строк на 72 символах).
+#
+# Types / типы:   feat fix refactor test docs ci chore style perf
+# Scopes / зоны:  core app ui tests ci docs git lab1
+#
+# Example / пример:
+#   feat(ui): add dark theme — тёмная тема оформления
+#
+#   EN: The theme toggle in the header switches palettes at runtime.
+#
+#   RU: Кнопка в шапке переключает палитру без перезапуска.
+#
+# Setup once / настроить один раз:
+#   git config commit.template .gitmessage.txt
