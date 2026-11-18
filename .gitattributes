@@ -1,0 +1,21 @@
+# Line endings / Окончания строк
+# EN: text files are stored with LF in the repository and checked out
+#     with the platform's native ending (CRLF on Windows, LF on Linux/macOS).
+# RU: текстовые файлы хранятся в репозитории с LF, а в рабочей копии
+#     получают «родные» окончания платформы (CRLF в Windows, LF в Linux/macOS).
+* text=auto
+
+*.py   text diff=python
+*.md   text diff=markdown
+*.yml  text
+*.txt  text
+*.sh   text eol=lf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary files / Бинарные файлы
+*.xlsx binary
+*.docx binary
+*.png  binary
+*.ico  binary

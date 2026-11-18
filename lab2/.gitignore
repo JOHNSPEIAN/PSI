@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.idea/
+.vscode/
+
+# рабочие файлы приложения
+data/results.xlsx
+data/*.log
+~$*.xlsx
+.~results-*.xlsx
