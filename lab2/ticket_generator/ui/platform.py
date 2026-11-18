@@ -83,8 +83,8 @@ def make_icon(master: tk.Misc, palette: Palette, size: int = 32) -> tk.PhotoImag
         rows.append(row)
     for y, row in enumerate(rows):
         for x, color in enumerate(row):
-            if color is None:
-                image.transparency_set(x, y, True)
+            if color is None:  # прямой вызов Tk: метод transparency_set есть не во всех Python
+                image.tk.call(image.name, "transparency", "set", x, y, True)
             else:
                 image.put(color, (x, y))
     return image

@@ -67,8 +67,10 @@ class PlatformTest(unittest.TestCase):
         try:
             icon = make_icon(root, LIGHT, size=16)
             self.assertEqual((icon.width(), icon.height()), (16, 16))
-            self.assertTrue(icon.transparency_get(0, 0))  # скруглённый угол прозрачен
-            self.assertFalse(icon.transparency_get(8, 8))
+            def transparent(x, y):
+                return root.tk.getboolean(root.tk.call(icon.name, "transparency", "get", x, y))
+            self.assertTrue(transparent(0, 0))  # скруглённый угол прозрачен
+            self.assertFalse(transparent(8, 8))
         finally:
             root.destroy()
 
