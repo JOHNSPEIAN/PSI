@@ -1,135 +1,210 @@
-"""Интеграционные тесты интерфейса (пропускаются, если нет Tkinter или дисплея)."""
+"""UI-тесты главного окна: настоящие виджеты Tk, действия через клики и клавиши."""
 import unittest
-from unittest import mock
 
-from tests.gui_support import press, requires_display
-from tests.helpers import GROUPS, TempDirTestCase, ticket_block, write_students, write_tickets
+from tests.gui_support import press, pump, requires_display
+from tests.ui.support import MainWindowTestCase
 
 
 @requires_display
-class GuiTest(TempDirTestCase):
-    def setUp(self):
-        super().setUp()
-        from ticket_generator.ui import main_window as gui
-        self.gui = gui
-        write_students(self.tmp / "students.xlsx", GROUPS)
-        write_tickets(self.tmp / "tickets.docx", ticket_block(1) + ticket_block(2) + ticket_block(3))
-        self.mb = mock.patch.object(gui, "messagebox").start()
-        self.addCleanup(mock.patch.stopall)
-        self.app = None
+class StartupTest(MainWindowTestCase):
+    def test_groups_listed_and_inputs_in_initial_state(self):
+        w = self.start()
+        self.assertEqual(list(w.group_combo["values"]), ["IA-2301", "IA-2302", "IA-2303"])
+        self.assertEqual(str(w.group_combo["state"]), "readonly")
+        self.assertEqual(str(w.student_combo["state"]), "disabled")
+        self.assertFalse(self.button_enabled())
 
-    def tearDown(self):
-        if self.app is not None:
-            self.app.destroy()
-        super().tearDown()
+    def test_stats_tiles_and_success_status(self):
+        w = self.start()
+        values = {k: t.value.cget("text") for k, t in w.stat_tiles.items()}
+        self.assertEqual(values, {"groups": "3", "students": "5", "tickets": "5", "issued": "0"})
+        self.assertIn("Загружено: 3 группы", w.status_bar.label.cget("text"))
+        self.assertEqual(w.status_bar.dot_color, w.theme.palette.success)
 
-    def start(self):
-        self.app = self.gui.App(self.tmp)
-        self.pump()
-        return self.app
+    def test_empty_history_placeholder_is_shown(self):
+        w = self.start()
+        self.assertEqual(w.history_tree.get_children(), ())
+        self.assertTrue(w.history_empty.winfo_ismapped())
 
-    def pump(self):
-        for _ in range(5):
-            self.app.update()
+    def test_load_error_shows_dialog_and_disables_inputs(self):
+        self.students.error = "Файл со списком студентов не найден: students.xlsx"
+        with self.assertLogs("ticket_generator.application.data_loader", level="ERROR"):
+            w = self.start()
+        self.assertEqual(len(self.dialogs.errors), 1)
+        self.assertIn("students.xlsx", self.dialogs.errors[0][1])
+        self.assertEqual(str(w.group_combo["state"]), "disabled")
+        self.assertFalse(self.button_enabled())
+        self.assertEqual(w.status_bar.dot_color, w.theme.palette.danger)
+        self.assertEqual(w.stat_tiles["groups"].value.cget("text"), "—")
 
-    def choose(self, group, student=None):
-        self.app.group_var.set(group)
-        self.app.on_group_selected()
-        if student is not None:
-            self.app.student_var.set(student)
-            self.app.on_student_selected()
 
-    def btn_enabled(self):
-        return "disabled" not in self.app.generate_btn.state()
-
-    def test_startup_fills_groups_and_creates_results(self):
-        app = self.start()
-        self.assertEqual(list(app.group_combo["values"]), list(GROUPS))
-        self.assertFalse(self.btn_enabled())
-        self.assertTrue((self.tmp / "results.xlsx").exists())
-
+@requires_display
+class SelectionTest(MainWindowTestCase):
     def test_group_then_student_enables_button(self):
-        app = self.start()
+        w = self.start()
         self.choose("IA-2302")
-        self.assertEqual(list(app.student_combo["values"]), ["Морозов Алексей", "Волкова Елена"])
-        self.assertFalse(self.btn_enabled())
+        self.assertEqual(list(w.student_combo["values"]), ["Морозов Алексей", "Волкова Елена"])
+        self.assertEqual(str(w.student_combo["state"]), "readonly")
+        self.assertFalse(self.button_enabled())
         self.choose("IA-2302", "Волкова Елена")
-        self.assertTrue(self.btn_enabled())
+        self.assertTrue(self.button_enabled())
+        self.assertIn("случайно", w.hint_label.cget("text"))
 
-    def test_empty_group_keeps_button_disabled(self):
-        app = self.start()
+    def test_empty_group_keeps_student_list_and_button_disabled(self):
+        w = self.start()
         self.choose("IA-2303")
-        self.assertEqual(list(app.student_combo["values"]), [])
-        self.assertEqual(str(app.student_combo["state"]), "disabled")
-        self.assertFalse(self.btn_enabled())
+        self.assertEqual(list(w.student_combo["values"]), [])
+        self.assertEqual(str(w.student_combo["state"]), "disabled")
+        self.assertFalse(self.button_enabled())
+        self.assertEqual(w.status_bar.dot_color, w.theme.palette.warning)
 
-    def test_generate_shows_ticket_and_escape_closes_only_result(self):
-        app = self.start()
+    def test_changing_group_clears_student(self):
+        w = self.start()
         self.choose("IA-2301", "Иванов Иван")
-        app.generate_btn.invoke()
-        self.pump()
-        win = app.result_window
-        self.assertIsNotNone(win)
-        texts = [w.cget("text") for w in win.winfo_children()[0].winfo_children()]
-        self.assertTrue(any(t.startswith("Ваш билет № ") for t in texts))
-        self.assertEqual(sum(1 for t in texts if t[:3] in ("1. ", "2. ", "3. ")), 3)
+        self.choose("IA-2302")
+        self.assertEqual(w.student_var.get(), "")
+        self.assertFalse(self.button_enabled())
 
-        press(win, "<Escape>")
-        self.pump()
-        self.assertIsNone(app.result_window)
-        self.assertTrue(app.winfo_exists())  # приложение живо
-        self.assertFalse(self.btn_enabled())  # готово к следующему студенту
 
-        # повторный выбор — тот же билет
-        first_no = int(texts[1].split("№")[1])
+@requires_display
+class GenerateTest(MainWindowTestCase):
+    def test_click_shows_ticket_and_updates_history(self):
+        w = self.start()
         self.choose("IA-2301", "Иванов Иван")
-        app.generate_btn.invoke()
-        self.pump()
-        again = [w.cget("text") for w in app.result_window.winfo_children()[0].winfo_children()]
-        self.assertEqual(int(again[1].split("№")[1]), first_no)
-        app.result_window.close()
+        ticket = self.click_generate()
+        self.assertIsNotNone(ticket)
+        self.assertEqual(ticket.number_text, "№ 3")
+        self.assertEqual(len(ticket.question_texts), 3)
+        rows = w.history_tree.get_children()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(w.history_tree.item(rows[0], "values")[1:], ("Иванов Иван", "IA-2301", "№ 3", "новый"))
+        self.assertFalse(w.history_empty.winfo_ismapped())
+        self.assertEqual(w.stat_tiles["issued"].value.cget("text"), "1")
 
-    def test_missing_sources_show_message_without_crash(self):
-        (self.tmp / "students.xlsx").unlink()
-        (self.tmp / "tickets.docx").unlink()
-        app = self.start()
-        self.mb.showerror.assert_called_once()
-        message = self.mb.showerror.call_args[0][1]
-        self.assertIn("students.xlsx", message)
-        self.assertIn("tickets.docx", message)
-        self.assertEqual(str(app.group_combo["state"]), "disabled")
-        self.assertFalse(self.btn_enabled())
+    def test_escape_closes_only_ticket_and_resets_student(self):
+        w = self.start()
+        self.choose("IA-2301", "Иванов Иван")
+        ticket = self.click_generate()
+        press(ticket, "<Escape>")
+        pump(w)
+        self.assertIsNone(w.ticket_window)
+        self.assertFalse(ticket.winfo_exists())
+        self.assertTrue(w.winfo_exists())
+        self.assertEqual(w.group_var.get(), "IA-2301")  # группа остаётся
+        self.assertEqual(w.student_var.get(), "")       # студент сброшен
+        self.assertFalse(self.button_enabled())
 
-    def test_locked_journal_asks_retry_then_saves(self):
-        app = self.start()
+    def test_repeat_gives_same_number_and_marks_history(self):
+        w = self.start()
+        self.choose("IA-2301", "Иванов Иван")
+        first = self.click_generate().number_text
+        w.ticket_window.close()
+        self.choose("IA-2301", "Иванов Иван")
+        self.assertIn(first, w.hint_label.cget("text"))
+        again = self.click_generate()
+        self.assertEqual(again.number_text, first)
+        self.assertEqual(again.badge_text, "ПОВТОР")
+        newest = w.history_tree.get_children()[0]
+        self.assertEqual(w.history_tree.item(newest, "values")[4], "повтор")
+        self.assertIn("repeat", w.history_tree.item(newest, "tags"))
+        again.close()
+
+    def test_enter_generates_when_ready(self):
+        w = self.start()
         self.choose("IA-2301", "Петрова Анна")
-        real_save = app.service.save
-        calls = {"n": 0}
+        press(w.student_combo, "<Return>")
+        pump(w)
+        self.assertIsNotNone(w.ticket_window)
+        w.ticket_window.close()
 
-        def flaky_save(a):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                raise self.gui.JournalLockedError("открыт в Excel")
-            real_save(a)
+    def test_enter_does_nothing_until_student_selected(self):
+        w = self.start()
+        self.choose("IA-2301")
+        press(w.group_combo, "<Return>")
+        self.assertIsNone(w.ticket_window)
+        self.assertEqual(self.journal.rows(), [])
 
-        app.service.save = flaky_save
-        self.mb.askretrycancel.return_value = True
-        app.generate_btn.invoke()
-        self.pump()
-        self.mb.askretrycancel.assert_called_once()
-        self.assertEqual(calls["n"], 2)
-        self.assertIsNotNone(app.result_window)
-        app.result_window.close()
-
-    def test_locked_journal_cancel_does_not_show_ticket(self):
-        app = self.start()
+    def test_locked_journal_retry_then_ticket(self):
+        w = self.start()
         self.choose("IA-2301", "Петрова Анна")
-        app.service.save = mock.Mock(side_effect=self.gui.JournalLockedError("locked"))
-        self.mb.askretrycancel.return_value = False
-        app.generate_btn.invoke()
-        self.pump()
-        self.assertIsNone(app.result_window)
-        self.assertTrue(app.winfo_exists())
+        self.journal.locked = True
+
+        def user_closes_excel_and_retries(title, message):
+            self.journal.locked = False
+            return True
+
+        self.dialogs.ask_retry = user_closes_excel_and_retries
+        with self.assertLogs("ticket_generator.application.presenter", level="WARNING"):
+            ticket = self.click_generate()
+        self.assertIsNotNone(ticket)
+        self.assertEqual(len(self.journal.rows()), 1)
+        ticket.close()
+
+    def test_locked_journal_cancel_shows_no_ticket(self):
+        w = self.start()
+        self.choose("IA-2301", "Петрова Анна")
+        self.journal.locked = True
+        with self.assertLogs("ticket_generator.application.presenter", level="WARNING"):
+            self.assertIsNone(self.click_generate())
+        self.assertEqual(len(self.dialogs.retry_questions), 1)
+        self.assertEqual(w.status_bar.dot_color, w.theme.palette.danger)
+        self.assertTrue(w.winfo_exists())
+
+
+@requires_display
+class ShortcutsAndThemeTest(MainWindowTestCase):
+    def test_f5_rereads_sources(self):
+        w = self.start()
+        self.students.groups = {**self.students.groups, "IA-2399": [("Новиков", "Олег")]}
+        press(w.group_combo, "<F5>")
+        pump(w)
+        self.assertIn("IA-2399", list(w.group_combo["values"]))
+
+    def test_reload_is_ignored_while_ticket_is_open(self):
+        w = self.start()
+        self.choose("IA-2301", "Иванов Иван")
+        self.click_generate()
+        loads = self.students.loads
+        w.on_reload()
+        self.assertEqual(self.students.loads, loads)
+        w.ticket_window.close()
+
+    def test_ctrl_t_toggles_theme_and_keeps_selection(self):
+        w = self.start()
+        self.choose("IA-2301", "Иванов Иван")
+        press(w.group_combo, "<Control-t>")
+        pump(w)
+        self.assertTrue(w.theme.palette.is_dark)
+        self.assertIn("Светлая", w.header.action_text)
+        self.assertEqual((w.group_var.get(), w.student_var.get()), ("IA-2301", "Иванов Иван"))
+        self.assertTrue(self.button_enabled())
+        self.assertEqual(str(w.cget("background")), w.theme.palette.bg)
+
+    def test_click_on_header_pill_toggles_theme(self):
+        w = self.start()
+        x, y = w.header.action_center()
+        w.header.event_generate("<Enter>", x=x, y=y)
+        w.header.event_generate("<Button-1>", x=x, y=y)
+        pump(w)
+        self.assertTrue(w.theme.palette.is_dark)
+        x, y = w.header.action_center()
+        w.header.event_generate("<Button-1>", x=x, y=y)
+        pump(w)
+        self.assertFalse(w.theme.palette.is_dark)
+
+
+@requires_display
+class DarkStartTest(MainWindowTestCase):
+    theme = "dark"
+
+    def test_window_starts_in_dark_theme(self):
+        w = self.start()
+        self.assertTrue(w.theme.palette.is_dark)
+        self.assertIn("Светлая", w.header.action_text)
+        self.choose("IA-2301", "Иванов Иван")
+        ticket = self.click_generate()
+        self.assertEqual(str(ticket.cget("background")), w.theme.palette.surface)
+        ticket.close()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Точка входа: python main.py [--data-dir ПАПКА]
+"""Точка входа: python main.py [--data-dir ПАПКА] [--theme system|light|dark]
 
 По умолчанию файлы students.xlsx, tickets.docx и results.xlsx ищутся в папке data
 рядом с main.py.
@@ -23,19 +23,28 @@ def setup_logging(log_file: Path) -> None:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
-def main(argv: list[str] | None = None) -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Генератор экзаменационных билетов")
     parser.add_argument("--data-dir", type=Path, default=BASE_DIR / "data",
                         help="папка с students.xlsx, tickets.docx и results.xlsx")
-    args = parser.parse_args(argv)
+    parser.add_argument("--theme", choices=("system", "light", "dark"), default="system",
+                        help="оформление: как в Windows (по умолчанию), светлое или тёмное")
+    return parser.parse_args(argv)
 
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     data_dir: Path = args.data_dir
     data_dir.mkdir(parents=True, exist_ok=True)
     setup_logging(data_dir / "ticket_generator.log")
 
-    from ticket_generator.ui.main_window import App  # импорт после настройки логов
+    # импорт после настройки логов
+    from ticket_generator.bootstrap import build_app
+    from ticket_generator.ui.platform import enable_hidpi, system_theme
 
-    App(data_dir).mainloop()
+    enable_hidpi()  # до создания первого окна
+    theme = system_theme() if args.theme == "system" else args.theme
+    build_app(data_dir, theme=theme).mainloop()
     return 0
 
 

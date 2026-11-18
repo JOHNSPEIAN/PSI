@@ -1,222 +1,269 @@
-"""Графический интерфейс на Tkinter."""
+"""Главное окно — пассивное представление (MVP).
+
+Окно ничего не решает само: показывает ViewState от презентера и передаёт ему
+действия пользователя. Тема оформления — единственное, чем окно управляет само.
+"""
 from __future__ import annotations
 
-import logging
 import tkinter as tk
-import tkinter.font as tkfont
-from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
-from ..application.data_loader import DataLoader
-from ..application.selection import SelectionState
-from ..application.ticket_service import TicketService
-from ..domain import Assignment, JournalError, JournalLockedError
-from ..infrastructure.journal_xlsx import XlsxJournal
-from ..infrastructure.students_xlsx import XlsxStudentsSource
-from ..infrastructure.tickets_docx import DocxTicketsSource
+from ..application.presenter import MainPresenter
+from ..application.view_state import StatusKind, ViewState
+from ..domain import Assignment
+from .platform import apply_titlebar, make_icon
+from .theme import PALETTES, Theme
+from .ticket_window import TicketWindow
+from .widgets import Card, GradientHeader, NumberBadge, StatTile, StatusBar
 
-log = logging.getLogger(__name__)
+APP_TITLE = "Экзаменационные билеты"
+APP_SUBTITLE = "ПСИ · Лабораторная работа №2 · генератор билетов"
+SHORTCUTS = "Enter — билет · F5 — обновить · Ctrl+T — тема"
 
-STUDENTS_FILE = "students.xlsx"
-TICKETS_FILE = "tickets.docx"
-RESULTS_FILE = "results.xlsx"
-
-
-class ResultWindow(tk.Toplevel):
-    """Окно «Ваш билет № N». ESC закрывает только это окно."""
-
-    def __init__(self, master: tk.Misc, assignment: Assignment, on_close):
-        super().__init__(master)
-        self._on_close = on_close
-        s = assignment.student
-        self.title(f"Билет — {s.surname} {s.name}")
-        self.transient(master)
-        self.resizable(False, False)
-
-        body = ttk.Frame(self, padding=24)
-        body.pack(fill="both", expand=True)
-
-        ttk.Label(body, text=f"{s.surname} {s.name}, группа {s.group}",
-                  style="Muted.TLabel").pack(anchor="w")
-        ttk.Label(body, text=f"Ваш билет № {assignment.ticket_no}",
-                  style="Ticket.TLabel").pack(anchor="w", pady=(4, 12))
-
-        if assignment.questions:
-            for i, question in enumerate(assignment.questions, start=1):
-                ttk.Label(body, text=f"{i}. {question}", wraplength=520,
-                          justify="left", style="Question.TLabel").pack(anchor="w", pady=3)
-        else:
-            ttk.Label(body, text="Билета с этим номером больше нет в tickets.docx — "
-                                 "обратитесь к преподавателю.",
-                      wraplength=520, foreground="#b42318").pack(anchor="w")
-
-        if assignment.repeat:
-            ttk.Label(body, text="Повторное обращение: выдан тот же билет, что и в первый раз.",
-                      style="Muted.TLabel", wraplength=520).pack(anchor="w", pady=(12, 0))
-
-        ttk.Label(body, text="Esc — закрыть", style="Muted.TLabel").pack(anchor="e", pady=(16, 0))
-
-        self.bind("<Escape>", self.close)
-        self.protocol("WM_DELETE_WINDOW", self.close)
-        self.update_idletasks()
-        self._center_on(master)
-        self.grab_set()
-        self.focus_force()
-
-    def _center_on(self, master: tk.Misc) -> None:
-        x = master.winfo_rootx() + (master.winfo_width() - self.winfo_reqwidth()) // 2
-        y = master.winfo_rooty() + (master.winfo_height() - self.winfo_reqheight()) // 3
-        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
-
-    def close(self, _event=None) -> None:
-        self.grab_release()
-        self.destroy()
-        self._on_close()
+HISTORY_COLUMNS = (
+    ("when", "Время", 96, "w"),
+    ("student", "Студент", 190, "w"),
+    ("group", "Группа", 84, "w"),
+    ("ticket", "Билет", 62, "center"),
+    ("kind", "Тип", 78, "center"),
+)
 
 
-class App(tk.Tk):
-    def __init__(self, data_dir: str | Path):
+class MainWindow(tk.Tk):
+    def __init__(self, theme: str = "light"):
         super().__init__()
-        self.data_dir = Path(data_dir)
-        self.selection = SelectionState()
-        self.service: TicketService | None = None
-        self.result_window: ResultWindow | None = None
-
-        self.title("Генератор билетов")
-        self.minsize(460, 0)
-        self.report_callback_exception = self._on_unexpected_error
-        self._init_styles()
+        self.title(APP_TITLE)
+        self.theme = Theme(self, PALETTES.get(theme, PALETTES["light"]))
+        self.presenter: MainPresenter | None = None
+        self.ticket_window: TicketWindow | None = None
+        self._state = ViewState()
+        self._container: tk.Frame | None = None
+        self._icon: tk.PhotoImage | None = None
+        self._apply_theme()
         self._build()
-        self.after(0, self.reload_sources)
+        self._bind_shortcuts()
+        self._place_on_screen()
 
-    # ---------- построение UI ----------
-    def _init_styles(self) -> None:
-        style = ttk.Style(self)
-        family = tkfont.nametofont("TkDefaultFont").actual("family")
-        style.configure("Title.TLabel", font=(family, 14, "bold"))
-        style.configure("Ticket.TLabel", font=(family, 18, "bold"))
-        style.configure("Question.TLabel", font=(family, 11))
-        style.configure("Muted.TLabel", foreground="#667085")
-        style.configure("Accent.TButton", padding=(12, 6))
+    # ---------- связь с презентером ----------
+    def connect(self, presenter: MainPresenter) -> None:
+        self.presenter = presenter
+        presenter.attach(self)
+        # Данные читаются после появления окна: сообщение об ошибке откроется поверх него.
+        self.after(0, presenter.reload)
 
+    def render(self, state: ViewState) -> None:
+        self._state = state
+        p = self.theme.palette
+
+        self.group_combo.configure(values=state.groups,
+                                   state="readonly" if state.groups else "disabled")
+        self.group_var.set(state.group or "")
+        self.student_combo.configure(values=state.students,
+                                     state="readonly" if state.students else "disabled")
+        self.student_var.set(state.student or "")
+        self.hint_label.configure(text=state.hint)
+        self.generate_btn.state(["!disabled"] if state.can_generate else ["disabled"])
+
+        stats = state.stats
+        for key, value in (("groups", stats.groups), ("students", stats.students),
+                           ("tickets", stats.tickets), ("issued", stats.issued)):
+            self.stat_tiles[key].set(value if state.loaded else "—")
+        self.repeats_label.configure(text=f"повторных обращений: {stats.repeats}" if stats.repeats else "")
+
+        self.history_tree.delete(*self.history_tree.get_children())
+        for i, item in enumerate(state.history):
+            tags = ("repeat" if item.repeat else "new", "odd" if i % 2 else "even")
+            self.history_tree.insert("", "end", values=(
+                item.when, item.student, item.group, f"№ {item.ticket_no}",
+                "повтор" if item.repeat else "новый"), tags=tags)
+        if state.history:
+            self.history_empty.place_forget()
+        else:
+            self.history_empty.place(relx=0.5, rely=0.45, anchor="center")
+
+        dot = {StatusKind.SUCCESS: p.success, StatusKind.WARNING: p.warning,
+               StatusKind.ERROR: p.danger, StatusKind.INFO: p.primary}[state.status_kind]
+        self.status_bar.set(state.status, dot)
+
+    def show_ticket(self, assignment: Assignment) -> None:
+        self.ticket_window = TicketWindow(self, self.theme, assignment, on_close=self._ticket_closed)
+
+    # ---------- тема ----------
+    def toggle_theme(self) -> None:
+        self.set_theme("light" if self.theme.palette.is_dark else "dark")
+
+    def set_theme(self, name: str) -> None:
+        if name == self.theme.palette.name or name not in PALETTES:
+            return
+        self.theme = Theme(self, PALETTES[name])
+        self._apply_theme()
+        self._build()
+        self.render(self._state)
+
+    def _apply_theme(self) -> None:
+        self.theme.apply()
+        self._icon = make_icon(self, self.theme.palette)
+        self.iconphoto(True, self._icon)
+        apply_titlebar(self, self.theme.palette.is_dark)
+
+    # ---------- построение ----------
     def _build(self) -> None:
-        frame = ttk.Frame(self, padding=20)
-        frame.pack(fill="both", expand=True)
-        frame.columnconfigure(1, weight=1)
+        if self._container is not None:
+            self._container.destroy()
+        p, px = self.theme.palette, self.theme.px
+        self._container = root = tk.Frame(self, background=p.bg)
+        root.pack(fill="both", expand=True)
 
-        ttk.Label(frame, text="Генератор экзаменационных билетов",
-                  style="Title.TLabel").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 14))
+        theme_label = "☀  Светлая тема" if p.is_dark else "☾  Тёмная тема"
+        self.header = GradientHeader(root, self.theme, APP_TITLE, APP_SUBTITLE,
+                                     action_text=theme_label, on_action=self.toggle_theme)
+        self.header.pack(fill="x")
 
-        ttk.Label(frame, text="Группа:").grid(row=1, column=0, sticky="w", pady=4, padx=(0, 10))
-        self.group_var = tk.StringVar()
-        self.group_combo = ttk.Combobox(frame, textvariable=self.group_var, state="disabled")
-        self.group_combo.grid(row=1, column=1, sticky="ew", pady=4)
+        self.status_bar = StatusBar(root, self.theme, SHORTCUTS)
+        self.status_bar.pack(side="bottom", fill="x")
+
+        content = tk.Frame(root, background=p.bg)
+        content.pack(fill="both", expand=True, padx=px(20), pady=px(20))
+        content.columnconfigure(0, weight=0, minsize=px(330))
+        content.columnconfigure(1, weight=1)
+        content.rowconfigure(1, weight=1)
+
+        self._build_selection_card(content).grid(row=0, column=0, rowspan=2, sticky="nsew",
+                                                 padx=(0, px(16)))
+        self._build_stats(content).grid(row=0, column=1, sticky="ew", pady=(0, px(16)))
+        self._build_history_card(content).grid(row=1, column=1, sticky="nsew")
+
+    def _build_selection_card(self, master: tk.Misc) -> Card:
+        px = self.theme.px
+        card = Card(master, self.theme, padding=22)
+        body = card.body
+        ttk.Label(body, text="Получение билета", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(body, text="Выберите группу, затем себя в списке.",
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(px(2), px(16)))
+
+        self.group_var = tk.StringVar(master=self)
+        self.group_combo = self._field(body, 1, "Группа", self.group_var)
         self.group_combo.bind("<<ComboboxSelected>>", self.on_group_selected)
 
-        ttk.Label(frame, text="Студент:").grid(row=2, column=0, sticky="w", pady=4, padx=(0, 10))
-        self.student_var = tk.StringVar()
-        self.student_combo = ttk.Combobox(frame, textvariable=self.student_var, state="disabled")
-        self.student_combo.grid(row=2, column=1, sticky="ew", pady=4)
+        self.student_var = tk.StringVar(master=self)
+        self.student_combo = self._field(body, 2, "Студент", self.student_var)
         self.student_combo.bind("<<ComboboxSelected>>", self.on_student_selected)
 
-        buttons = ttk.Frame(frame)
-        buttons.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(14, 0))
-        self.generate_btn = ttk.Button(buttons, text="Сгенерировать билет", style="Accent.TButton",
-                                       command=self.on_generate, state="disabled")
-        self.generate_btn.pack(side="left")
-        self.reload_btn = ttk.Button(buttons, text="Обновить данные", command=self.reload_sources)
-        self.reload_btn.pack(side="right")
+        self.hint_label = ttk.Label(body, text="", style="Hint.TLabel", wraplength=px(280),
+                                    justify="left")
+        self.hint_label.pack(anchor="w", fill="x", pady=(px(8), 0))
 
-        self.status_var = tk.StringVar()
-        ttk.Label(frame, textvariable=self.status_var, style="Muted.TLabel",
-                  wraplength=420, justify="left").grid(row=4, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        spacer = ttk.Frame(body, style="Card.TFrame")
+        spacer.pack(fill="both", expand=True)
 
-    # ---------- загрузка данных ----------
-    def reload_sources(self) -> None:
-        """Читает students.xlsx и tickets.docx; при ошибке — сообщение, приложение работает дальше."""
-        self.service = None
-        self.selection = SelectionState()
-        self._refresh_combos()
+        self.generate_btn = ttk.Button(body, text="Сгенерировать билет  →", style="Primary.TButton",
+                                       command=self.on_generate, cursor="hand2")
+        self.generate_btn.pack(fill="x", pady=(px(18), px(8)))
+        self.generate_btn.state(["disabled"])
+        self.reload_btn = ttk.Button(body, text="⟳  Обновить данные", style="Secondary.TButton",
+                                     command=self.on_reload, cursor="hand2")
+        self.reload_btn.pack(fill="x")
+        return card
 
-        journal = XlsxJournal(self.data_dir / RESULTS_FILE)
-        result = DataLoader(XlsxStudentsSource(self.data_dir / STUDENTS_FILE),
-                            DocxTicketsSource(self.data_dir / TICKETS_FILE), journal).load()
-        if not result.ok:
-            self.status_var.set("Данные не загружены. Исправьте файлы и нажмите «Обновить данные».")
-            messagebox.showerror("Ошибка загрузки данных", "\n\n".join(result.errors), parent=self)
-            return
+    def _field(self, master: tk.Misc, step: int, caption: str, variable: tk.StringVar) -> ttk.Combobox:
+        px = self.theme.px
+        row = ttk.Frame(master, style="Card.TFrame")
+        row.pack(fill="x", pady=(px(4), px(6)))
+        NumberBadge(row, self.theme, step, size=22).pack(side="left", padx=(0, px(8)))
+        ttk.Label(row, text=caption, style="Field.TLabel").pack(side="left")
+        combo = ttk.Combobox(master, textvariable=variable, state="disabled", height=12,
+                             font=self.theme.fonts.base)
+        combo.pack(fill="x", pady=(0, px(8)))
+        return combo
 
-        self.selection = SelectionState(result.roster)
-        self.service = TicketService(result.tickets, journal)
-        self._refresh_combos()
-        self.status_var.set(f"Групп: {len(result.roster)}, студентов: {result.roster.total_students}, "
-                            f"билетов: {len(result.tickets)}.")
+    def _build_stats(self, master: tk.Misc) -> tk.Frame:
+        px = self.theme.px
+        row = tk.Frame(master, background=self.theme.palette.bg)
+        self.stat_tiles: dict[str, StatTile] = {}
+        for i, (key, caption) in enumerate((("groups", "групп"), ("students", "студентов"),
+                                            ("tickets", "билетов"), ("issued", "выдано"))):
+            row.columnconfigure(i, weight=1, uniform="stats")
+            tile = StatTile(row, self.theme, caption)
+            tile.grid(row=0, column=i, sticky="ew", padx=(0 if i == 0 else px(12), 0))
+            self.stat_tiles[key] = tile
+        return row
 
-    def _refresh_combos(self) -> None:
-        self.group_combo["values"] = self.selection.group_names
-        self.group_combo.configure(state="readonly" if self.selection.group_names else "disabled")
-        self.group_var.set(self.selection.group or "")
-        self._fill_students(self.selection.students_of(self.selection.group) if self.selection.group else [])
+    def _build_history_card(self, master: tk.Misc) -> Card:
+        p, px = self.theme.palette, self.theme.px
+        card = Card(master, self.theme, padding=18)
+        head = ttk.Frame(card.body, style="Card.TFrame")
+        head.pack(fill="x", pady=(0, px(10)))
+        ttk.Label(head, text="Последние выдачи", style="CardTitle.TLabel").pack(side="left")
+        self.repeats_label = ttk.Label(head, text="", style="CardMuted.TLabel")
+        self.repeats_label.pack(side="right")
 
-    def _fill_students(self, names: list[str]) -> None:
-        self.student_combo["values"] = names
-        self.student_var.set("")
-        self.student_combo.configure(state="readonly" if names else "disabled")
-        self._update_button()
+        table = ttk.Frame(card.body, style="Card.TFrame")
+        table.pack(fill="both", expand=True)
+        self.history_tree = ttk.Treeview(table, style="History.Treeview", show="headings",
+                                         columns=[c[0] for c in HISTORY_COLUMNS], height=8,
+                                         selectmode="browse")
+        for key, title, width, anchor in HISTORY_COLUMNS:
+            self.history_tree.heading(key, text=title.upper(), anchor=anchor)
+            self.history_tree.column(key, width=px(width), minwidth=px(width) // 2, anchor=anchor,
+                                     stretch=key == "student")
+        self.history_tree.tag_configure("odd", background=p.surface_alt)
+        self.history_tree.tag_configure("even", background=p.surface)
+        self.history_tree.tag_configure("repeat", foreground=p.text_muted)
+        self.history_tree.tag_configure("new", foreground=p.text)
+        scroll = ttk.Scrollbar(table, orient="vertical", command=self.history_tree.yview)
+        self.history_tree.configure(yscrollcommand=scroll.set)
+        self.history_tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        self.history_empty = ttk.Label(table, text="Пока никто не получил билет",
+                                       style="Empty.TLabel")
+        return card
 
-    def _update_button(self) -> None:
-        enabled = self.selection.can_generate and self.service is not None
-        self.generate_btn.configure(state="normal" if enabled else "disabled")
+    def _bind_shortcuts(self) -> None:
+        # Вторые варианты — для русской раскладки (Ctrl+К и Ctrl+Е на тех же клавишах).
+        for key in ("<Return>", "<KP_Enter>"):
+            self.bind(key, self._on_enter)
+        for key in ("<F5>", "<Control-r>", "<Control-Cyrillic_ka>"):
+            self.bind(key, lambda _e: self.on_reload())
+        for key in ("<Control-t>", "<Control-Cyrillic_ie>"):
+            self.bind(key, lambda _e: self.toggle_theme())
 
-    # ---------- обработчики ----------
+    def _place_on_screen(self) -> None:
+        self.update_idletasks()
+        width = max(self.winfo_reqwidth(), self.theme.px(940))
+        height = max(self.winfo_reqheight(), self.theme.px(600))
+        x = max((self.winfo_screenwidth() - width) // 2, 0)
+        y = max((self.winfo_screenheight() - height) // 3, 0)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.minsize(self.winfo_reqwidth(), self.winfo_reqheight())
+
+    # ---------- действия пользователя → презентер ----------
     def on_group_selected(self, _event=None) -> None:
-        names = self.selection.select_group(self.group_var.get())
-        self._fill_students(names)
-        if self.selection.group and not names:
-            self.status_var.set(f"В группе {self.selection.group} нет студентов.")
+        if self.presenter:
+            self.presenter.select_group(self.group_var.get())
+            if self._state.students:
+                self.student_combo.focus_set()
 
     def on_student_selected(self, _event=None) -> None:
-        self.selection.select_student(self.student_var.get())
-        self._update_button()
+        if self.presenter:
+            self.presenter.select_student(self.student_var.get())
+            if self._state.can_generate:
+                self.generate_btn.focus_set()
 
     def on_generate(self) -> None:
-        if not (self.selection.can_generate and self.service):
-            return
-        try:
-            assignment = self.service.assign(self.selection.student)
-        except JournalError as exc:
-            log.error("%s", exc)
-            messagebox.showerror("Ошибка журнала", str(exc), parent=self)
-            return
-        if not self._save_with_retry(assignment):
-            return
-        self.result_window = ResultWindow(self, assignment, on_close=self.on_result_closed)
+        if self.presenter and self.ticket_window is None:
+            self.presenter.generate()
 
-    def _save_with_retry(self, assignment: Assignment) -> bool:
-        """Сохраняет сразу после генерации; при блокировке файла предлагает повторить."""
-        while True:
-            try:
-                self.service.save(assignment)
-                return True
-            except JournalLockedError as exc:
-                log.warning("%s", exc)
-                if not messagebox.askretrycancel("Журнал недоступен", str(exc), parent=self):
-                    self.status_var.set("Билет не выдан: журнал не удалось сохранить.")
-                    return False
-            except JournalError as exc:
-                log.error("%s", exc)
-                messagebox.showerror("Ошибка журнала", str(exc), parent=self)
-                return False
+    def on_reload(self) -> None:
+        if self.presenter and self.ticket_window is None:
+            self.presenter.reload()
 
-    def on_result_closed(self) -> None:
-        """Возврат к выбору: группа остаётся, студент сбрасывается — готово к следующему."""
-        self.result_window = None
-        self.selection.reset_student()
-        self.student_var.set("")
-        self._update_button()
+    def _on_enter(self, _event=None) -> str:
+        if self._state.can_generate:
+            self.on_generate()
+        return "break"
+
+    def _ticket_closed(self) -> None:
+        self.ticket_window = None
+        if self.presenter:
+            self.presenter.ticket_closed()
         self.student_combo.focus_set()
-
-    def _on_unexpected_error(self, exc_type, exc, tb) -> None:
-        log.exception("Непредвиденная ошибка", exc_info=(exc_type, exc, tb))
-        messagebox.showerror("Ошибка", f"Непредвиденная ошибка: {exc}\nПодробности в журнале логов.",
-                             parent=self)
